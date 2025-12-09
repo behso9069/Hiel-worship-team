@@ -212,8 +212,7 @@ export default function Schedule() {
 }
 
 function AttendanceTable({ members, sundays, saturdays, attendances, getAttendanceForMember, onUpdateAttendance, isLoading, user }) {
-  const allDates = [...sundays.map(d => ({ date: d, type: 'sunday_worship', label: '주일' })),
-                    ...saturdays.map(d => ({ date: d, type: 'saturday_practice', label: '연습' }))];
+const allDates = sundays.map(d => ({ date: d, type: 'sunday_worship', label: '주일' }));
   allDates.sort((a, b) => a.date - b.date);
 
   const handleStatusChange = (member, date, eventType, status) => {

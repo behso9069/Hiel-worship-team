@@ -458,7 +458,7 @@ export default function Songs() {
                             {song.reference_links?.length > 0 && song.reference_links.some(l => l.url) && (
                               <div className="mt-3 flex flex-wrap gap-2">
                                 {song.reference_links.filter(l => l.url).map((link, linkIdx) => (
-                                  <a
+                                  
                                     key={linkIdx}
                                     href={link.url}
                                     target="_blank"

@@ -7,7 +7,7 @@ import { ko } from 'date-fns/locale';
 import { 
   Music, Plus, Search, Play, FileText, Link as LinkIcon,
   Edit2, Trash2, X, ExternalLink, Hash, Clock, ChevronLeft, ChevronRight,
-  Calendar, User as UserIcon, ListMusic
+  Calendar, User as UserIcon, ListMusic, Upload, Printer, Eye, Download
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -55,6 +55,16 @@ const getWeekNumber = (date) => {
   return Math.floor(diffDays / 7) + 2;
 };
 
+// 파일을 base64로 변환하는 함수
+const fileToBase64 = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
+
 export default function Songs() {
   const [activeTab, setActiveTab] = useState('setlist');
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -65,6 +75,7 @@ export default function Songs() {
   const [selectedSong, setSelectedSong] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [uploadingFile, setUploadingFile] = useState(null);
   
   const [songForm, setSongForm] = useState({
     title: '',
@@ -74,6 +85,8 @@ export default function Songs() {
     duration: '',
     youtube_url: '',
     sheet_music_url: '',
+    sheet_music_file: null, // base64 악보 파일
+    sheet_music_filename: '',
     chord_chart: '',
     lyrics: '',
     tags: []
@@ -82,7 +95,15 @@ export default function Songs() {
   const [setlistForm, setSetlistForm] = useState({
     date: '',
     worship_leader: '',
-    songs: [{ title: '', artist: '', key: '', reference_links: [{ label: '', url: '' }], notes: '' }],
+    songs: [{ 
+      title: '', 
+      artist: '', 
+      key: '', 
+      reference_links: [{ label: '', url: '' }], 
+      notes: '',
+      sheet_music_file: null,
+      sheet_music_filename: ''
+    }],
     practice_notes: '',
     status: 'draft'
   });
@@ -174,14 +195,16 @@ export default function Songs() {
     setEditingSetlist(null);
     setSongForm({
       title: '', artist: '', key: '', tempo: '', duration: '',
-      youtube_url: '', sheet_music_url: '', chord_chart: '', lyrics: '', tags: []
+      youtube_url: '', sheet_music_url: '', sheet_music_file: null, sheet_music_filename: '',
+      chord_chart: '', lyrics: '', tags: []
     });
     setSetlistForm({
       date: '', worship_leader: '',
-      songs: [{ title: '', artist: '', key: '', reference_links: [{ label: '', url: '' }], notes: '' }],
+      songs: [{ title: '', artist: '', key: '', reference_links: [{ label: '', url: '' }], notes: '', sheet_music_file: null, sheet_music_filename: '' }],
       practice_notes: '', status: 'draft'
     });
     setTagInput('');
+    setUploadingFile(null);
   };
 
   const openSongDialog = (song = null) => {
@@ -196,6 +219,8 @@ export default function Songs() {
         duration: song.duration || '',
         youtube_url: song.youtube_url || '',
         sheet_music_url: song.sheet_music_url || '',
+        sheet_music_file: song.sheet_music_file || null,
+        sheet_music_filename: song.sheet_music_filename || '',
         chord_chart: song.chord_chart || '',
         lyrics: song.lyrics || '',
         tags: song.tags || []
@@ -211,12 +236,167 @@ export default function Songs() {
       setSetlistForm({
         date: setlist.date || '',
         worship_leader: setlist.worship_leader || '',
-        songs: setlist.songs?.length > 0 ? setlist.songs : [{ title: '', artist: '', key: '', reference_links: [{ label: '', url: '' }], notes: '' }],
+        songs: setlist.songs?.length > 0 ? setlist.songs : [{ title: '', artist: '', key: '', reference_links: [{ label: '', url: '' }], notes: '', sheet_music_file: null, sheet_music_filename: '' }],
         practice_notes: setlist.practice_notes || '',
         status: setlist.status || 'draft'
       });
     }
     setIsDialogOpen(true);
+  };
+
+  // 악보 파일 업로드 핸들러 (Song)
+  const handleSongSheetMusicUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+    if (!allowedTypes.includes(file.type)) {
+      alert('이미지(JPG, PNG) 또는 PDF 파일만 업로드 가능합니다.');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) { // 10MB limit
+      alert('파일 크기는 10MB 이하여야 합니다.');
+      return;
+    }
+
+    setUploadingFile('song');
+    try {
+      const base64 = await fileToBase64(file);
+      setSongForm(prev => ({
+        ...prev,
+        sheet_music_file: base64,
+        sheet_music_filename: file.name
+      }));
+    } catch (error) {
+      console.error('File upload error:', error);
+      alert('파일 업로드에 실패했습니다.');
+    } finally {
+      setUploadingFile(null);
+    }
+  };
+
+  // 악보 파일 업로드 핸들러 (Setlist Song)
+  const handleSetlistSongSheetMusicUpload = async (e, songIndex) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+    if (!allowedTypes.includes(file.type)) {
+      alert('이미지(JPG, PNG) 또는 PDF 파일만 업로드 가능합니다.');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert('파일 크기는 10MB 이하여야 합니다.');
+      return;
+    }
+
+    setUploadingFile(`setlist-${songIndex}`);
+    try {
+      const base64 = await fileToBase64(file);
+      setSetlistForm(prev => {
+        const songs = [...prev.songs];
+        songs[songIndex] = {
+          ...songs[songIndex],
+          sheet_music_file: base64,
+          sheet_music_filename: file.name
+        };
+        return { ...prev, songs };
+      });
+    } catch (error) {
+      console.error('File upload error:', error);
+      alert('파일 업로드에 실패했습니다.');
+    } finally {
+      setUploadingFile(null);
+    }
+  };
+
+  // 악보 출력 함수
+  const printSheetMusic = (setlist) => {
+    const songsWithSheets = setlist.songs?.filter(s => s.sheet_music_file) || [];
+    
+    if (songsWithSheets.length === 0) {
+      alert('출력할 악보가 없습니다.');
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('팝업이 차단되었습니다. 팝업 차단을 해제해주세요.');
+      return;
+    }
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${setlist.week_number}주차 악보 - ${format(parseISO(setlist.date), 'M월 d일', { locale: ko })}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: 'Malgun Gothic', sans-serif; background: #fff; }
+          .page-break { page-break-after: always; }
+          .sheet-container { 
+            width: 100%; 
+            min-height: 100vh; 
+            display: flex; 
+            flex-direction: column;
+            align-items: center; 
+            justify-content: center;
+            padding: 20px;
+          }
+          .sheet-title {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+          }
+          .sheet-content { 
+            max-width: 100%; 
+            height: auto; 
+          }
+          .sheet-content img { 
+            max-width: 100%; 
+            height: auto; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          }
+          .sheet-content embed { 
+            width: 100%; 
+            min-height: 90vh; 
+          }
+          @media print {
+            body { background: #fff; }
+            .sheet-container { page-break-after: always; }
+            .sheet-container:last-child { page-break-after: auto; }
+          }
+        </style>
+      </head>
+      <body>
+        ${songsWithSheets.map((song, idx) => `
+          <div class="sheet-container${idx < songsWithSheets.length - 1 ? ' page-break' : ''}">
+            <div class="sheet-title">${idx + 1}. ${song.title}${song.key ? ` (${song.key})` : ''}</div>
+            <div class="sheet-content">
+              ${song.sheet_music_file.startsWith('data:application/pdf') 
+                ? `<embed src="${song.sheet_music_file}" type="application/pdf" />`
+                : `<img src="${song.sheet_music_file}" alt="${song.title} 악보" />`
+              }
+            </div>
+          </div>
+        `).join('')}
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 500);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
   };
 
   const handleSongSubmit = (e) => {
@@ -257,7 +437,7 @@ export default function Songs() {
   const addSetlistSong = () => {
     setSetlistForm(prev => ({
       ...prev,
-      songs: [...prev.songs, { title: '', artist: '', key: '', reference_links: [{ label: '', url: '' }], notes: '' }]
+      songs: [...prev.songs, { title: '', artist: '', key: '', reference_links: [{ label: '', url: '' }], notes: '', sheet_music_file: null, sheet_music_filename: '' }]
     }));
   };
 
@@ -405,6 +585,17 @@ export default function Songs() {
                           <Badge className={setlist.status === 'confirmed' ? 'bg-white/20 text-white' : 'bg-yellow-400 text-yellow-900'}>
                             {setlist.status === 'confirmed' ? '확정' : '작성중'}
                           </Badge>
+                          {setlist.songs?.some(s => s.sheet_music_file) && (
+                            <Button 
+                              size="sm"
+                              variant="ghost" 
+                              className="h-8 text-white hover:bg-white/20"
+                              onClick={() => printSheetMusic(setlist)}
+                            >
+                              <Printer className="w-4 h-4 mr-1" />
+                              악보 출력
+                            </Button>
+                          )}
                           <Button 
                             size="icon" 
                             variant="ghost" 
@@ -440,8 +631,16 @@ export default function Songs() {
                                 <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm">
                                   {idx + 1}
                                 </div>
-                                <div>
-                                  <h4 className="font-semibold text-slate-800">{song.title}</h4>
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="font-semibold text-slate-800">{song.title}</h4>
+                                    {song.sheet_music_file && (
+                                      <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                                        <FileText className="w-3 h-3 mr-1" />
+                                        악보
+                                      </Badge>
+                                    )}
+                                  </div>
                                   {song.artist && (
                                     <p className="text-sm text-slate-500">{song.artist}</p>
                                   )}
@@ -458,7 +657,7 @@ export default function Songs() {
                             {song.reference_links?.length > 0 && song.reference_links.some(l => l.url) && (
                               <div className="mt-3 flex flex-wrap gap-2">
                                 {song.reference_links.filter(l => l.url).map((link, linkIdx) => (
-                                  <a
+                                  
                                     key={linkIdx}
                                     href={link.url}
                                     target="_blank"
@@ -550,6 +749,12 @@ export default function Songs() {
                       <CardContent className="p-0">
                         <div className="h-32 bg-gradient-to-br from-indigo-100 via-purple-100 to-pink-100 flex items-center justify-center relative">
                           <Music className="w-12 h-12 text-indigo-300" />
+                          {song.sheet_music_file && (
+                            <Badge className="absolute top-2 left-2 bg-green-500">
+                              <FileText className="w-3 h-3 mr-1" />
+                              악보
+                            </Badge>
+                          )}
                           {song.youtube_url && (
                             <div className="absolute inset-0 flex items-center justify-center bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity">
                               <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
@@ -687,7 +892,35 @@ export default function Songs() {
                 </TabsContent>
 
                 <TabsContent value="sheet" className="mt-4">
-                  {selectedSong.sheet_music_url ? (
+                  {selectedSong.sheet_music_file ? (
+                    <div className="space-y-4">
+                      <div className="p-4 bg-slate-50 rounded-xl">
+                        {selectedSong.sheet_music_file.startsWith('data:application/pdf') ? (
+                          <embed 
+                            src={selectedSong.sheet_music_file} 
+                            type="application/pdf" 
+                            className="w-full h-[600px] rounded"
+                          />
+                        ) : (
+                          <img 
+                            src={selectedSong.sheet_music_file} 
+                            alt={`${selectedSong.title} 악보`}
+                            className="w-full rounded"
+                          />
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <a 
+                          href={selectedSong.sheet_music_file}
+                          download={selectedSong.sheet_music_filename || `${selectedSong.title}_악보`}
+                          className="flex items-center gap-2 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
+                        >
+                          <Download className="w-4 h-4" />
+                          다운로드
+                        </a>
+                      </div>
+                    </div>
+                  ) : selectedSong.sheet_music_url ? (
                     <div className="space-y-4">
                       <a 
                         href={selectedSong.sheet_music_url}
@@ -818,6 +1051,38 @@ export default function Songs() {
             </div>
 
             <div>
+              <Label htmlFor="sheet_music">악보 파일 업로드</Label>
+              <div className="mt-2">
+                <label className="flex items-center justify-center gap-2 px-4 py-3 bg-slate-50 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors">
+                  <Upload className="w-5 h-5 text-slate-400" />
+                  <span className="text-sm text-slate-600">
+                    {uploadingFile === 'song' ? '업로드 중...' : songForm.sheet_music_filename || '이미지 또는 PDF 선택 (최대 10MB)'}
+                  </span>
+                  <input 
+                    type="file" 
+                    accept="image/*,.pdf"
+                    onChange={handleSongSheetMusicUpload}
+                    className="hidden"
+                    disabled={uploadingFile === 'song'}
+                  />
+                </label>
+                {songForm.sheet_music_file && (
+                  <div className="mt-2 flex items-center justify-between p-2 bg-green-50 rounded">
+                    <span className="text-sm text-green-700">✓ {songForm.sheet_music_filename}</span>
+                    <Button 
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setSongForm(prev => ({ ...prev, sheet_music_file: null, sheet_music_filename: '' }))}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div>
               <Label htmlFor="chord_chart">코드 진행</Label>
               <Textarea 
                 id="chord_chart"
@@ -939,6 +1204,43 @@ export default function Songs() {
                       value={song.artist}
                       onChange={(e) => updateSetlistSong(sIdx, 'artist', e.target.value)}
                     />
+
+                    {/* Sheet Music Upload */}
+                    <div>
+                      <label className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-slate-300 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors text-sm">
+                        <Upload className="w-4 h-4 text-slate-400" />
+                        <span className="text-slate-600">
+                          {uploadingFile === `setlist-${sIdx}` ? '업로드 중...' : song.sheet_music_filename || '악보 업로드'}
+                        </span>
+                        <input 
+                          type="file" 
+                          accept="image/*,.pdf"
+                          onChange={(e) => handleSetlistSongSheetMusicUpload(e, sIdx)}
+                          className="hidden"
+                          disabled={uploadingFile === `setlist-${sIdx}`}
+                        />
+                      </label>
+                      {song.sheet_music_file && (
+                        <div className="mt-1 flex items-center justify-between p-2 bg-green-50 rounded text-xs">
+                          <span className="text-green-700">✓ {song.sheet_music_filename}</span>
+                          <Button 
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0"
+                            onClick={() => {
+                              setSetlistForm(prev => {
+                                const songs = [...prev.songs];
+                                songs[sIdx] = { ...songs[sIdx], sheet_music_file: null, sheet_music_filename: '' };
+                                return { ...prev, songs };
+                              });
+                            }}
+                          >
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
 
                     {/* Reference Links */}
                     <div>

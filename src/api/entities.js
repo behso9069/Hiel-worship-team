@@ -102,13 +102,41 @@ export const ChangeRequest = createEntity('change_requests');
 // Simple auth placeholder (no login required for now)
 export const User = {
   async me() {
+    // 로컬 스토리지에서 현재 사용자 정보 가져오기
+    const savedUser = localStorage.getItem('hiel_current_user');
+    if (savedUser) {
+      return JSON.parse(savedUser);
+    }
     return {
       id: 'local-user',
       email: 'user@hiel.church',
-      full_name: '히엘 팀원'
+      full_name: '히엘 팀원',
+      is_team_leader: false
     };
   },
+  
+  // 현재 사용자 설정
+  setCurrentUser(member) {
+    const userData = {
+      id: member.id,
+      email: member.email || 'user@hiel.church',
+      full_name: member.name,
+      is_team_leader: member.executive_roles?.some(role => 
+        role.role === '팀장' && role.year === new Date().getFullYear()
+      ) || false
+    };
+    localStorage.setItem('hiel_current_user', JSON.stringify(userData));
+    return userData;
+  },
+  
+  // 팀장 여부 확인
+  async isTeamLeader() {
+    const user = await this.me();
+    return user.is_team_leader === true;
+  },
+  
   logout() {
+    localStorage.removeItem('hiel_current_user');
     console.log('Logged out');
   }
 };

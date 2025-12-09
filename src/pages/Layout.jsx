@@ -3,10 +3,11 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { createPageUrl } from './utils';
 import { User as AuthUser } from '@/api/entities';
+import * as entities from '@/api/entities';
 import { 
   Home, Calendar, Bell, Music, Archive, Users, 
   MessageSquare, Heart, Menu, X, LogOut, ChevronDown,
-  Settings, User as UserIcon
+  Settings, User as UserIcon, Shield
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,6 +17,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from '@/lib/utils';
 
 const navigation = [
@@ -33,6 +40,8 @@ const navigation = [
 export default function Layout({ children, currentPageName }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, setUser] = useState(null);
+  const [members, setMembers] = useState([]);
+  const [showUserSelect, setShowUserSelect] = useState(false);
   const location = useLocation();
 
   useEffect(() => {
@@ -45,10 +54,35 @@ export default function Layout({ children, currentPageName }) {
       }
     };
     loadUser();
+    
+    // 팀원 목록 로드
+    const loadMembers = async () => {
+      try {
+        const memberList = await entities.Member.list('name');
+        setMembers(memberList);
+      } catch (e) {
+        console.log('Failed to load members');
+      }
+    };
+    loadMembers();
   }, []);
 
   const handleLogout = () => {
     AuthUser.logout();
+    setUser({
+      id: 'local-user',
+      email: 'user@hiel.church',
+      full_name: '히엘 팀원',
+      is_team_leader: false
+    });
+    window.location.reload();
+  };
+
+  const handleSelectUser = (member) => {
+    const userData = AuthUser.setCurrentUser(member);
+    setUser(userData);
+    setShowUserSelect(false);
+    window.location.reload();
   };
 
   return (
@@ -161,14 +195,16 @@ export default function Layout({ children, currentPageName }) {
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowUserSelect(true)}>
                     <UserIcon className="w-4 h-4 mr-2" />
-                    내 프로필
+                    사용자 변경
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <Settings className="w-4 h-4 mr-2" />
-                    설정
-                  </DropdownMenuItem>
+                  {user?.is_team_leader && (
+                    <DropdownMenuItem className="text-amber-600">
+                      <Shield className="w-4 h-4 mr-2" />
+                      팀장 권한
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout} className="text-red-600">
                     <LogOut className="w-4 h-4 mr-2" />
@@ -204,6 +240,42 @@ export default function Layout({ children, currentPageName }) {
           {children}
         </main>
       </div>
+
+      {/* User Select Dialog */}
+      <Dialog open={showUserSelect} onOpenChange={setShowUserSelect}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>사용자 선택</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {members.map(member => {
+              const isLeader = member.executive_roles?.some(
+                role => role.role === '팀장' && role.year === new Date().getFullYear()
+              );
+              return (
+                <button
+                  key={member.id}
+                  onClick={() => handleSelectUser(member)}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 transition-colors text-left"
+                >
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-medium">
+                    {member.name?.[0]}
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-slate-800">{member.name}</p>
+                    <p className="text-xs text-slate-500">
+                      {member.positions?.slice(0, 2).join(', ')}
+                    </p>
+                  </div>
+                  {isLeader && (
+                    <Shield className="w-5 h-5 text-amber-500" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

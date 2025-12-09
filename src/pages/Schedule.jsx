@@ -34,17 +34,32 @@ const POSITIONS = [
   '일렉기타', '어쿠스틱기타', '베이스기타', '엔지니어'
 ];
 
-// 주차 계산 함수
+// 주차 계산 함수 - 토요일(연습)과 일요일(주일)을 같은 주차로 묶음
 const getWeekNumber = (date) => {
   const d = new Date(date);
-  const firstDay = new Date(d.getFullYear(), d.getMonth(), 1);
+  // 토요일이면 다음날(일요일) 기준으로 주차 계산
+  const targetDate = new Date(d);
+  if (d.getDay() === 6) { // 토요일
+    targetDate.setDate(d.getDate() + 1); // 다음날(일요일)로 이동
+  }
+  
+  const firstDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
+  
+  // 해당 월의 첫 번째 일요일 찾기
   const firstSunday = new Date(firstDay);
-  firstSunday.setDate(firstDay.getDate() + (7 - firstDay.getDay()) % 7);
+  const dayOfWeek = firstDay.getDay();
+  if (dayOfWeek === 0) {
+    // 1일이 일요일이면 그대로
+  } else {
+    firstSunday.setDate(firstDay.getDate() + (7 - dayOfWeek));
+  }
   
-  if (d < firstSunday) return 1;
+  // 첫 번째 일요일 이전이면 1주차
+  if (targetDate < firstSunday) return 1;
   
-  const diffDays = Math.floor((d - firstSunday) / (1000 * 60 * 60 * 24));
-  return Math.floor(diffDays / 7) + 2;
+  // 첫 번째 일요일부터 몇 주차인지 계산
+  const diffDays = Math.floor((targetDate - firstSunday) / (1000 * 60 * 60 * 24));
+  return Math.floor(diffDays / 7) + (firstDay.getDay() === 0 ? 1 : 2);
 };
 
 export default function Schedule() {
@@ -212,7 +227,8 @@ export default function Schedule() {
 }
 
 function AttendanceTable({ members, sundays, saturdays, attendances, getAttendanceForMember, onUpdateAttendance, isLoading, user }) {
-const allDates = sundays.map(d => ({ date: d, type: 'sunday_worship', label: '주일' }));
+  // 주일(일요일)만 표시
+  const allDates = sundays.map(d => ({ date: d, type: 'sunday_worship', label: '주일' }));
   allDates.sort((a, b) => a.date - b.date);
 
   const handleStatusChange = (member, date, eventType, status) => {

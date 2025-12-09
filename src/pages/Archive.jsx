@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import * as entities from '@/api/entities';
 import { User } from '@/api/entities';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -22,6 +22,13 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -36,6 +43,15 @@ import { cn } from '@/lib/utils';
 import PageHeader from '@/components/common/PageHeader';
 import EmptyState from '@/components/common/EmptyState';
 
+// 음원 카테고리
+const AUDIO_CATEGORIES = ['연습파일', '예배실황', '기타'];
+
+const categoryColors = {
+  '연습파일': 'bg-green-100 text-green-700',
+  '예배실황': 'bg-blue-100 text-blue-700',
+  '기타': 'bg-slate-100 text-slate-700',
+};
+
 export default function ArchivePage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
@@ -44,9 +60,11 @@ export default function ArchivePage() {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [playingAudio, setPlayingAudio] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [isTeamLeader, setIsTeamLeader] = useState(false);
+  const [filterCategory, setFilterCategory] = useState('all');
   const [formData, setFormData] = useState({
     date: '',
-    title: '',
+    category: '예배실황',
     worship_leader: '',
     team_members: {},
     songs: [],
@@ -56,6 +74,15 @@ export default function ArchivePage() {
   const [songsInput, setSongsInput] = useState('');
 
   const queryClient = useQueryClient();
+
+  // 팀장 여부 확인
+  useEffect(() => {
+    const checkTeamLeader = async () => {
+      const isLeader = await User.isTeamLeader();
+      setIsTeamLeader(isLeader);
+    };
+    checkTeamLeader();
+  }, []);
 
   const { data: records = [], isLoading } = useQuery({
     queryKey: ['serviceRecords'],
@@ -97,7 +124,7 @@ export default function ArchivePage() {
     setEditingRecord(null);
     setFormData({
       date: '',
-      title: '',
+      category: '예배실황',
       worship_leader: '',
       team_members: {},
       songs: [],
@@ -111,7 +138,7 @@ export default function ArchivePage() {
     setEditingRecord(record);
     setFormData({
       date: record.date || '',
-      title: record.title || '',
+      category: record.category || '예배실황',
       worship_leader: record.worship_leader || '',
       team_members: record.team_members || {},
       songs: record.songs || [],
@@ -281,24 +308,31 @@ export default function ArchivePage() {
                               >
                                 <Edit2 className="w-4 h-4" />
                               </Button>
-                              <Button 
-                                size="icon" 
-                                variant="secondary" 
-                                className="h-8 w-8 bg-white/90 text-red-500"
-                                onClick={() => setDeleteConfirm(record)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
+                              {isTeamLeader && (
+                                <Button 
+                                  size="icon" 
+                                  variant="secondary" 
+                                  className="h-8 w-8 bg-white/90 text-red-500"
+                                  onClick={() => setDeleteConfirm(record)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
                             </div>
                           </div>
                           
                           <div className="p-4">
-                            <div className="flex items-center gap-2 text-xs text-slate-500 mb-2">
-                              <Calendar className="w-3 h-3" />
-                              {record.date ? format(parseISO(record.date), 'M월 d일 EEEE', { locale: ko }) : '날짜 미정'}
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2 text-xs text-slate-500">
+                                <Calendar className="w-3 h-3" />
+                                {record.date ? format(parseISO(record.date), 'M월 d일 EEEE', { locale: ko }) : '날짜 미정'}
+                              </div>
+                              <Badge className={cn("text-xs", categoryColors[record.category] || categoryColors['기타'])}>
+                                {record.category || '기타'}
+                              </Badge>
                             </div>
                             <h3 className="font-semibold text-slate-800 truncate">
-                              {record.title || '제목 없음'}
+                              {record.date ? format(parseISO(record.date), 'yyyy년 M월 d일', { locale: ko }) : '날짜 미정'}
                             </h3>
                             <p className="text-sm text-slate-500 mt-1">
                               인도: {record.worship_leader || '미정'}
@@ -458,13 +492,20 @@ export default function ArchivePage() {
             </div>
 
             <div>
-              <Label htmlFor="title">제목</Label>
-              <Input 
-                id="title"
-                value={formData.title}
-                onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                placeholder="예: 주일 오후예배"
-              />
+              <Label htmlFor="category">카테고리 *</Label>
+              <Select 
+                value={formData.category} 
+                onValueChange={(v) => setFormData(prev => ({ ...prev, category: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="카테고리 선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  {AUDIO_CATEGORIES.map(cat => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div>

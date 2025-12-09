@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import * as entities from '@/api/entities';
 import { User } from '@/api/entities';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -80,6 +80,7 @@ export default function Members() {
   const [filterPosition, setFilterPosition] = useState('all');
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [activeTab, setActiveTab] = useState('members');
+  const [isTeamLeader, setIsTeamLeader] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     positions: [],
@@ -91,6 +92,15 @@ export default function Members() {
   const [newExecutiveRole, setNewExecutiveRole] = useState({ year: currentYear, role: '' });
 
   const queryClient = useQueryClient();
+
+  // 팀장 여부 확인
+  useEffect(() => {
+    const checkTeamLeader = async () => {
+      const isLeader = await User.isTeamLeader();
+      setIsTeamLeader(isLeader);
+    };
+    checkTeamLeader();
+  }, []);
 
   const { data: members = [], isLoading } = useQuery({
     queryKey: ['members'],
@@ -314,7 +324,8 @@ export default function Members() {
               members={filteredMembers} 
               currentYear={currentYear}
               onEdit={openEditDialog} 
-              onDelete={setDeleteConfirm} 
+              onDelete={setDeleteConfirm}
+              isTeamLeader={isTeamLeader}
             />
           </TabsContent>
 
@@ -323,7 +334,8 @@ export default function Members() {
               members={instrumentMembers} 
               currentYear={currentYear}
               onEdit={openEditDialog} 
-              onDelete={setDeleteConfirm} 
+              onDelete={setDeleteConfirm}
+              isTeamLeader={isTeamLeader}
             />
           </TabsContent>
 
@@ -332,7 +344,8 @@ export default function Members() {
               members={singerMembers} 
               currentYear={currentYear}
               onEdit={openEditDialog} 
-              onDelete={setDeleteConfirm} 
+              onDelete={setDeleteConfirm}
+              isTeamLeader={isTeamLeader}
             />
           </TabsContent>
         </Tabs>
@@ -547,7 +560,7 @@ export default function Members() {
   );
 }
 
-function MemberGrid({ members, currentYear, onEdit, onDelete }) {
+function MemberGrid({ members, currentYear, onEdit, onDelete, isTeamLeader }) {
   return (
     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <AnimatePresence mode="popLayout">
@@ -593,14 +606,16 @@ function MemberGrid({ members, currentYear, onEdit, onDelete }) {
                         >
                           <Edit2 className="w-4 h-4" />
                         </Button>
-                        <Button 
-                          size="icon" 
-                          variant="ghost" 
-                          className="h-8 w-8 text-red-500 hover:text-red-600"
-                          onClick={() => onDelete(member)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        {isTeamLeader && (
+                          <Button 
+                            size="icon" 
+                            variant="ghost" 
+                            className="h-8 w-8 text-red-500 hover:text-red-600"
+                            onClick={() => onDelete(member)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
                       </div>
                     </div>
 

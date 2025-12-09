@@ -34,6 +34,9 @@ const POSITIONS = [
   '일렉기타', '어쿠스틱기타', '베이스기타', '엔지니어'
 ];
 
+// 복수 배정 가능한 포지션
+const MULTI_SELECT_POSITIONS = ['여성싱어', '남성싱어', '엔지니어'];
+
 // 주차 계산 함수 - 토요일(연습)과 일요일(주일)을 같은 주차로 묶음
 const getWeekNumber = (date) => {
   const d = new Date(date);
@@ -357,7 +360,22 @@ function AssignmentView({ sundays, members, schedules, getScheduleForDate, getAv
   useEffect(() => {
     if (selectedSunday) {
       const schedule = getScheduleForDate(selectedSunday);
-      setAssignments(schedule?.assignments || {});
+      const loadedAssignments = schedule?.assignments || {};
+      
+      // 기존 데이터를 배열 형태로 정규화
+      const normalizedAssignments = {};
+      POSITIONS.forEach(position => {
+        const value = loadedAssignments[position];
+        if (MULTI_SELECT_POSITIONS.includes(position)) {
+          // 복수 선택 포지션은 배열로
+          normalizedAssignments[position] = Array.isArray(value) ? value : (value ? [value] : []);
+        } else {
+          // 단일 선택 포지션은 문자열로
+          normalizedAssignments[position] = Array.isArray(value) ? value[0] : value;
+        }
+      });
+      
+      setAssignments(normalizedAssignments);
     }
   }, [selectedSunday, schedules]);
 
@@ -368,6 +386,20 @@ function AssignmentView({ sundays, members, schedules, getScheduleForDate, getAv
       status
     });
     setIsEditing(false);
+  };
+
+  const toggleMemberSelection = (position, memberName) => {
+    setAssignments(prev => {
+      const current = prev[position] || [];
+      const isSelected = current.includes(memberName);
+      
+      return {
+        ...prev,
+        [position]: isSelected 
+          ? current.filter(name => name !== memberName)
+          : [...current, memberName]
+      };
+    });
   };
 
   const selectedSchedule = selectedSunday ? getScheduleForDate(selectedSunday) : null;
@@ -462,6 +494,7 @@ function AssignmentView({ sundays, members, schedules, getScheduleForDate, getAv
               {POSITIONS.map((position) => {
                 const availableMembers = getAvailableMembersForDate(selectedSunday, position);
                 const assigned = assignments[position];
+                const isMultiSelect = MULTI_SELECT_POSITIONS.includes(position);
 
                 return (
                   <div 
@@ -476,40 +509,87 @@ function AssignmentView({ sundays, members, schedules, getScheduleForDate, getAv
                     </div>
                     
                     {isEditing ? (
-                      <Select
-                        value={Array.isArray(assigned) ? assigned[0] : assigned || ''}
-                        onValueChange={(value) => {
-                          setAssignments(prev => ({
-                            ...prev,
-                            [position]: position === '보컬' ? [value] : value
-                          }));
-                        }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="선택" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={null}>미배정</SelectItem>
-                          {availableMembers.map(member => (
-                            <SelectItem key={member.id} value={member.name}>
-                              {member.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      isMultiSelect ? (
+                        // 복수 선택 UI (체크박스)
+                        <div className="space-y-2 max-h-40 overflow-y-auto">
+                          {availableMembers.length > 0 ? (
+                            availableMembers.map(member => {
+                              const isSelected = (assigned || []).includes(member.name);
+                              return (
+                                <label
+                                  key={member.id}
+                                  className={cn(
+                                    "flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors",
+                                    isSelected ? 'bg-indigo-100' : 'hover:bg-slate-100'
+                                  )}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleMemberSelection(position, member.name)}
+                                    className="w-4 h-4 text-indigo-600 rounded"
+                                  />
+                                  <span className="text-sm">{member.name}</span>
+                                </label>
+                              );
+                            })
+                          ) : (
+                            <p className="text-xs text-slate-400">가능한 팀원 없음</p>
+                          )}
+                        </div>
+                      ) : (
+                        // 단일 선택 UI (Select)
+                        <Select
+                          value={assigned || ''}
+                          onValueChange={(value) => {
+                            setAssignments(prev => ({
+                              ...prev,
+                              [position]: value === 'none' ? '' : value
+                            }));
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="선택" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">미배정</SelectItem>
+                            {availableMembers.map(member => (
+                              <SelectItem key={member.id} value={member.name}>
+                                {member.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )
                     ) : (
-                      <div className="flex items-center gap-2">
-                        {assigned ? (
-                          <>
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-xs font-medium">
-                              {(Array.isArray(assigned) ? assigned[0] : assigned)?.[0]}
-                            </div>
-                            <span className="font-medium text-slate-800">
-                              {Array.isArray(assigned) ? assigned.join(', ') : assigned}
-                            </span>
-                          </>
+                      // 보기 모드
+                      <div className="space-y-2">
+                        {isMultiSelect ? (
+                          // 복수 배정 표시
+                          (assigned && assigned.length > 0) ? (
+                            assigned.map((name, idx) => (
+                              <div key={idx} className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-xs font-medium">
+                                  {name[0]}
+                                </div>
+                                <span className="text-sm font-medium text-slate-800">{name}</span>
+                              </div>
+                            ))
+                          ) : (
+                            <span className="text-slate-400 text-sm">미배정</span>
+                          )
                         ) : (
-                          <span className="text-slate-400">미배정</span>
+                          // 단일 배정 표시
+                          assigned ? (
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-xs font-medium">
+                                {assigned[0]}
+                              </div>
+                              <span className="font-medium text-slate-800">{assigned}</span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">미배정</span>
+                          )
                         )}
                       </div>
                     )}
